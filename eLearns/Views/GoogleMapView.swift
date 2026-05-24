@@ -29,6 +29,11 @@ struct GoogleMapView: UIViewRepresentable {
         // Enable 3D buildings
         mapView.isBuildingsEnabled = true
 
+        // Shrink Google logo
+        if let logoView = mapView.subviews.first(where: { String(describing: type(of: $0)).contains("Logo") }) {
+            logoView.transform = CGAffineTransform(scaleX: 0.65, y: 0.65)
+        }
+
         // Store reference so NavigationService can use it
         NavigationService.shared.mapView = mapView
 
