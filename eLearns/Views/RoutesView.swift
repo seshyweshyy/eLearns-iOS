@@ -98,12 +98,11 @@ struct RoutesView: View {
             } label: {
                 Label("Go to Map", systemImage: "map")
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color("AccentGold"))
                     .padding(.horizontal, 24)
                     .padding(.vertical, 13)
-                    .background(Color("AccentGold"))
-                    .foregroundStyle(.black)
-                    .clipShape(Capsule())
             }
+            .buttonStyle(.glassPill)
             .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

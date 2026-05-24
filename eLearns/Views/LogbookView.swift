@@ -3,33 +3,92 @@ import SwiftUI
 struct LogbookView: View {
     @EnvironmentObject var appState: AppState
     @State private var showAddLog = false
+    @State private var showExportSheet = false
+    @State private var exportURL: URL? = nil
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-
-                    // Hours progress cards
+            List {
+                // Hours progress — non-deletable header section
+                Section {
                     hoursProgress
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                }
 
-                    // Log entries
-                    if appState.logEntries.isEmpty {
+                // Log entries
+                if appState.logEntries.isEmpty {
+                    Section {
                         emptyState
-                    } else {
-                        logList
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
+                } else {
+                    Section {
+                        Text("Recent drives")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+
+                        ForEach(appState.logEntries) { entry in
+                            logEntryCard(entry)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        appState.deleteLogEntry(entry)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                        }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
             }
+            .listStyle(.plain)
             .navigationTitle("Logbook")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAddLog = true
-                    } label: {
-                        Image(systemName: "plus")
+                    HStack(spacing: 12) {
+                        Menu {
+                            Button {
+                                exportURL = LogbookExporter.exportPDF(entries: appState.logEntries, profile: appState.profile)
+                                showExportSheet = true
+                            } label: {
+                                Label("Export PDF", systemImage: "doc.richtext")
+                            }
+                            Button {
+                                exportURL = LogbookExporter.exportCSV(entries: appState.logEntries, profile: appState.profile)
+                                showExportSheet = true
+                            } label: {
+                                Label("Export CSV / Excel", systemImage: "tablecells")
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Color("AccentGold"))
+                                .frame(width: 34, height: 34)
+                                .buttonStyle(.glassCircle)
+                        }
+
+                        Button {
+                            showAddLog = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Color("AccentGold"))
+                                .frame(width: 34, height: 34)
+                        }
+                        .buttonStyle(.glassCircle)
                     }
+                }
+            }
+            .sheet(isPresented: $showExportSheet) {
+                if let url = exportURL {
+                    ShareSheet(url: url)
                 }
             }
             .sheet(isPresented: $showAddLog) {
@@ -38,6 +97,11 @@ struct LogbookView: View {
                 }
             }
         }
+    }
+
+    private var logList: some View {
+        // No longer used — list is built inline in body
+        EmptyView()
     }
 
     // MARK: - Hours progress
@@ -109,64 +173,60 @@ struct LogbookView: View {
         .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: - Log list
-
-    private var logList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recent drives")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            ForEach(appState.logEntries) { entry in
-                logEntryCard(entry)
-            }
-        }
-    }
+    @State private var selectedEntry: LogEntry? = nil
 
     private func logEntryCard(_ entry: LogEntry) -> some View {
-        NavigationLink(destination: LogEntryDetailView(entry: entry)) {
-        HStack(spacing: 14) {
-            // Night/day indicator
-            Image(systemName: entry.isNight ? "moon.stars.fill" : "sun.max.fill")
-                .foregroundStyle(entry.isNight ? .indigo : .yellow)
-                .font(.system(size: 18))
-                .frame(width: 36, height: 36)
-                .background(
-                    (entry.isNight ? Color.indigo : Color.yellow).opacity(0.1),
-                    in: RoundedRectangle(cornerRadius: 9)
-                )
+        Button {
+            selectedEntry = entry
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: entry.isNight ? "moon.stars.fill" : "sun.max.fill")
+                    .foregroundStyle(entry.isNight ? .indigo : .yellow)
+                    .font(.system(size: 18))
+                    .frame(width: 36, height: 36)
+                    .background(
+                        (entry.isNight ? Color.indigo : Color.yellow).opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: 9)
+                    )
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.system(size: 15, weight: .medium))
-                HStack(spacing: 8) {
-                    Text("\(entry.durationMinutes) min")
-                    Text("·")
-                    Text(String(format: "%.1f km", entry.distanceKm))
-                    if !entry.startSuburb.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(.system(size: 15, weight: .medium))
+                    HStack(spacing: 8) {
+                        Text("\(entry.durationMinutes) min")
                         Text("·")
-                        Text(entry.startSuburb)
-                    } else if !entry.supervisorName.isEmpty {
-                        Text("·")
-                        Text(entry.supervisorName)
+                        Text(String(format: "%.1f km", entry.distanceKm))
+                        if !entry.startSuburb.isEmpty {
+                            Text("·")
+                            Text(entry.startSuburb)
+                        } else if !entry.supervisorName.isEmpty {
+                            Text("·")
+                            Text(entry.supervisorName)
+                        }
                     }
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
             }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+        .buttonStyle(.plain)
+        .navigationDestination(isPresented: Binding(
+            get: { selectedEntry?.id == entry.id },
+            set: { if !$0 { selectedEntry = nil } }
+        )) {
+            LogEntryDetailView(entry: entry)
+        }
     }
-    .buttonStyle(.plain)
-}
 
     // MARK: - Empty state
 
@@ -731,4 +791,14 @@ struct LogEntryDetailView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
     }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    var url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uvc: UIActivityViewController, context: Context) {}
 }

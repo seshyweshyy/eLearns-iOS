@@ -18,6 +18,7 @@ class NavigationService: NSObject, ObservableObject {
 
     var mapView: GMSMapView?
     private var navigator: GMSNavigator?
+    private var locationProvider: GMSRoadSnappedLocationProvider?
     private var cancellables = Set<AnyCancellable>()
 
     private override init() {
@@ -33,7 +34,12 @@ class NavigationService: NSObject, ObservableObject {
         self.navigator = navigator
         navigator?.add(self)
 
-        // Build waypoints
+        // Start road-snapped location — this is what switches the blue dot to the nav arrow
+        let locationProvider = mapView.roadSnappedLocationProvider
+        locationProvider?.startUpdatingLocation()
+        locationProvider?.add(self)
+        self.locationProvider = locationProvider
+
         var targets: [GMSNavigationWaypoint] = waypoints.compactMap {
             GMSNavigationWaypoint(location: $0, title: "Waypoint")
         }
@@ -46,6 +52,8 @@ class NavigationService: NSObject, ObservableObject {
                     navigator?.isGuidanceActive = true
                     mapView.cameraMode = .following
                     mapView.travelMode = .driving
+                    // Explicitly enable the navigation UI — shows arrow + hides blue dot
+                    mapView.isNavigationEnabled = true
                     self.isNavigating = true
                     self.hasArrived = false
                 } else {
@@ -55,11 +63,13 @@ class NavigationService: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Stop navigation
-
     func stopNavigation() {
+        locationProvider?.stopUpdatingLocation()
+        locationProvider?.remove(self)
+        locationProvider = nil
         navigator?.isGuidanceActive = false
         navigator?.clearDestinations()
+        mapView?.isNavigationEnabled = false
         mapView?.cameraMode = .free
         isNavigating = false
         hasArrived = false

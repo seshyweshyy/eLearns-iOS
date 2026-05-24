@@ -41,46 +41,65 @@ struct GoogleMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ mapView: GMSMapView, context: Context) {
-        mapView.clear()
-
-        if let route = route {
-            drawRoute(on: mapView, route: route)
+        // Only redraw the route polyline when the route itself changes,
+        // not on every location tick — avoids the flicker/jump
+        if route?.id != context.coordinator.lastRouteID {
+            mapView.clear()
+            if let route = route {
+                drawRoute(on: mapView, route: route)
+            }
+            context.coordinator.lastRouteID = route?.id
         }
 
         if isNavigating {
-            // 3D nav view — matches real Google Maps nav experience
-            mapView.isBuildingsEnabled        = true
-            mapView.cameraMode                = .following
-            mapView.travelMode                = .driving
-            mapView.settings.tiltGestures     = false
-            mapView.settings.scrollGestures   = false
-            mapView.settings.rotateGestures   = false
+            // Only set these once when navigation starts, not every update
+            if !context.coordinator.hasConfiguredNavCamera {
+                mapView.isBuildingsEnabled    = true
+                mapView.cameraMode            = .following   // SDK handles all camera movement
+                mapView.travelMode            = .driving
+                mapView.settings.tiltGestures   = false
+                mapView.settings.scrollGestures = false
+                mapView.settings.rotateGestures = false
 
-            // Animate into 3D perspective on nav start
-            let navCamera = GMSCameraPosition(
-                target: mapView.myLocation?.coordinate ?? mapView.camera.target,
-                zoom: 18.5,
-                bearing: mapView.camera.bearing,
-                viewingAngle: 60   // 60° tilt = real Google Maps nav look
-            )
-            mapView.animate(to: navCamera)
+                // Animate into 3D once — after that .following takes over
+                let navCamera = GMSCameraPosition(
+                    target: mapView.myLocation?.coordinate ?? mapView.camera.target,
+                    zoom: 18.5,
+                    bearing: mapView.camera.bearing,
+                    viewingAngle: 60
+                )
+                mapView.animate(to: navCamera)
+                context.coordinator.hasConfiguredNavCamera = true
+            }
+            // Do NOT touch the camera again while navigating —
+            // .following + the Navigation SDK handle interpolation natively
 
         } else {
-            // Free browse mode — flat, full gestures restored
-            mapView.cameraMode                = .free
-            mapView.settings.tiltGestures     = true
-            mapView.settings.scrollGestures   = true
-            mapView.settings.rotateGestures   = true
+            if context.coordinator.hasConfiguredNavCamera {
+                mapView.cameraMode              = .free
+                mapView.settings.tiltGestures   = true
+                mapView.settings.scrollGestures = true
+                mapView.settings.rotateGestures = true
 
-            // Animate back to flat when nav ends
-            let flatCamera = GMSCameraPosition(
-                target: mapView.camera.target,
-                zoom: mapView.camera.zoom,
-                bearing: 0,
-                viewingAngle: 0
-            )
-            mapView.animate(to: flatCamera)
+                let flatCamera = GMSCameraPosition(
+                    target: mapView.camera.target,
+                    zoom: mapView.camera.zoom,
+                    bearing: 0,
+                    viewingAngle: 0
+                )
+                mapView.animate(to: flatCamera)
+                context.coordinator.hasConfiguredNavCamera = false
+            }
         }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator: NSObject {
+        var lastRouteID: UUID? = nil
+        var hasConfiguredNavCamera: Bool = false
     }
 
     // MARK: - Draw route polyline + markers

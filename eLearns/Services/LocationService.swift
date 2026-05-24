@@ -17,8 +17,9 @@ class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = 5
-        manager.headingFilter = 5
+        manager.distanceFilter = kCLDistanceFilterNone  // every update, let the SDK decide
+        manager.headingFilter = 2                        // smoother heading, was 5°
+        manager.pausesLocationUpdatesAutomatically = false
     }
 
     func requestPermission() {

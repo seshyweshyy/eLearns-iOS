@@ -8,167 +8,230 @@ struct NavigationOverlayView: View {
     @State private var showStopConfirm = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            turnCard
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+        ZStack(alignment: .bottom) {
 
+            // Top floating card + "Then" chip
+            VStack(alignment: .leading, spacing: 6) {
+                topCard
+                if let next = nextStepInstruction {
+                    thenChip(icon: nextTurnIcon, label: next)
+                }
+                Spacer()
+            }
+            .padding(.top, 12)
+            .padding(.horizontal, 16)
+
+            // Bottom bar
             bottomBar
+                .padding(.bottom, 35)
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
         }
         .alert("Stop Navigation?", isPresented: $showStopConfirm) {
-            Button("Stop", role: .destructive) {
-                onStop()
-            }
+            Button("Stop", role: .destructive) { onStop() }
             Button("Continue", role: .cancel) { }
         } message: {
             Text("Your current drive progress will not be saved.")
         }
-        .onChange(of: showStopConfirm) { _ in }
     }
 
-    // MARK: - Turn instruction card
+    // MARK: - Top floating card
 
-    private var turnCard: some View {
-        ZStack(alignment: .trailing) {
-            HStack(spacing: 14) {
-                Image(systemName: turnIconName)
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color("AccentGold"))
-                    .frame(width: 44, height: 44)
-                    .background(Color("AccentGold").opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+    private var topCard: some View {
+        HStack(alignment: .center, spacing: 16) {
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(currentInstruction)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+            // Arrow icon
+            Image(systemName: turnIconName)
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48)
 
-                    if navService.remainingDistanceKm > 0 {
-                        Text(distanceString)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                // Spacer to reserve space for the button
-                Color.clear
-                    .frame(width: 36, height: 36)
+            // Street name block
+            VStack(alignment: .leading, spacing: 2) {
+                Text(nextStepDistanceString)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text(currentInstruction)
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .modifier(GlassPanelModifier(cornerRadius: 24))
-            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-
-            // Button sits outside the glassEffect layer so it receives touches
-            Button {
-                DispatchQueue.main.async {
-                    showStopConfirm = true
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.secondary.opacity(0.2), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(12)
-            .contentShape(Circle().inset(by: -10))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(red: 0.22, green: 0.33, blue: 0.28))  // Google Maps dark green
+        )
+        .modifier(TopCardGlassOverlay())
+        .shadow(color: .black.opacity(0.35), radius: 14, y: 5)
     }
 
-    // MARK: - Bottom bar (speed, ETA, remaining)
+    // MARK: - "Then" chip
+
+    private func thenChip(icon: String, label: String) -> some View {
+        HStack(spacing: 8) {
+            Text("Then")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(red: 0.22, green: 0.33, blue: 0.28).opacity(0.92))
+        )
+        .modifier(ThenChipGlassOverlay())
+        .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+    }
+
+    // MARK: - Bottom bar
 
     private var bottomBar: some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .center, spacing: 0) {
 
-            // Speed
-            VStack(spacing: 2) {
-                Text("\(Int(navService.currentSpeedKmh))")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text("km/h")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+            // ETA + distance · time
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(Int(navService.remainingMinutes.rounded()))")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color("AccentGold"))
+                    Text("min")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color("AccentGold"))
+                }
+                HStack(spacing: 4) {
+                    Text(distanceRemainingString)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Text(etaString)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                }
             }
-            .frame(maxWidth: .infinity)
+            .padding(.leading, 20)
 
-            Divider().frame(height: 30)
+            Spacer()
 
-            // Remaining distance
-            VStack(spacing: 2) {
-                Text(String(format: "%.1f", navService.remainingDistanceKm))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text("km left")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+            // Exit button (red pill — matches Google Maps)
+            Button {
+                DispatchQueue.main.async { showStopConfirm = true }
+            } label: {
+                Text("Exit")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
+                    .background(Color(red: 0.85, green: 0.27, blue: 0.22), in: Capsule())
             }
-            .frame(maxWidth: .infinity)
-
-            Divider().frame(height: 30)
-
-            // ETA
-            VStack(spacing: 2) {
-                Text(etaString)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text("ETA")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.plain)
+            .padding(.trailing, 20)
         }
-        .padding(.vertical, 14)
-        .modifier(GlassPanelModifier(cornerRadius: 24))
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .modifier(GlassPanelModifier(cornerRadius: 28))
+        .shadow(color: .black.opacity(0.25), radius: 12, y: -3)
     }
 
     // MARK: - Computed helpers
 
     private var currentInstruction: String {
-        guard let route = route else { return "Follow the route" }
+        guard let route else { return "Follow the route" }
         let idx = min(navService.currentStepIndex, route.steps.count - 1)
         return route.steps[safe: idx]?.instruction ?? "Continue"
     }
 
-    private var turnIconName: String {
-        guard let route = route else { return "arrow.up" }
-        let idx = min(navService.currentStepIndex, route.steps.count - 1)
-        let maneuver = route.steps[safe: idx]?.maneuverType ?? ""
+    private var nextStepInstruction: String? {
+        guard let route else { return nil }
+        let nextIdx = navService.currentStepIndex + 1
+        guard nextIdx < route.steps.count else { return nil }
+        let instr = route.steps[nextIdx].instruction
+        return instr.isEmpty ? nil : instr
+    }
 
+    private var turnIconName: String {
+        maneuverIcon(route?.steps[safe: navService.currentStepIndex]?.maneuverType ?? "")
+    }
+
+    private var nextTurnIcon: String {
+        guard let route else { return "arrow.up" }
+        let next = route.steps[safe: navService.currentStepIndex + 1]?.maneuverType ?? ""
+        return maneuverIcon(next)
+    }
+
+    private func maneuverIcon(_ maneuver: String) -> String {
         switch maneuver {
-        case let m where m.contains("turn-right"):         return "arrow.turn.up.right"
-        case let m where m.contains("turn-left"):          return "arrow.turn.up.left"
-        case let m where m.contains("sharp-right"):        return "arrow.turn.right.up"
-        case let m where m.contains("sharp-left"):         return "arrow.turn.left.up"
-        case let m where m.contains("roundabout"):         return "arrow.clockwise"
-        case let m where m.contains("uturn"):              return "arrow.uturn.left"
-        case "arrive":                                     return "flag.checkered"
-        default:                                           return "arrow.up"
+        case let m where m.contains("turn-right"):  return "arrow.turn.up.right"
+        case let m where m.contains("turn-left"):   return "arrow.turn.up.left"
+        case let m where m.contains("sharp-right"): return "arrow.turn.right.up"
+        case let m where m.contains("sharp-left"):  return "arrow.turn.left.up"
+        case let m where m.contains("roundabout"):  return "arrow.clockwise"
+        case let m where m.contains("uturn"):       return "arrow.uturn.left"
+        case "arrive":                              return "flag.checkered"
+        default:                                    return "arrow.up"
         }
     }
 
-    private var distanceString: String {
+    private var nextStepDistanceString: String {
+        guard let route else { return "" }
+        let idx = min(navService.currentStepIndex, route.steps.count - 1)
+        let metres = route.steps[safe: idx]?.distanceMetres ?? 0
+        return metres >= 1000
+            ? String(format: "%.1f km", metres / 1000)
+            : "\(Int(metres)) m"
+    }
+
+    private var distanceRemainingString: String {
         let km = navService.remainingDistanceKm
-        if km < 1 {
-            return "In \(Int(km * 1000)) m"
-        }
-        return "In \(String(format: "%.1f", km)) km"
+        return km >= 1
+            ? String(format: "%.1f km", km)
+            : "\(Int(km * 1000)) m"
     }
 
     private var etaString: String {
         let arrival = Date().addingTimeInterval(navService.remainingMinutes * 60)
         return arrival.formatted(date: .omitted, time: .shortened)
     }
+
+    private var bottomSafeAreaPadding: CGFloat {
+        (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first { $0.isKeyWindow }?
+            .safeAreaInsets.bottom) ?? 34
+    }
 }
 
-// MARK: - Safe array subscript
+// MARK: - Glass overlays
+// On iOS 26 these add a subtle Liquid Glass sheen over the coloured backgrounds.
+// On iOS 16–25 they're no-ops so the solid colour shows as-is.
+
+private struct TopCardGlassOverlay: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: 20))
+        } else {
+            content
+        }
+    }
+}
+
+private struct ThenChipGlassOverlay: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: 12))
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - Safe subscript
 
 extension Array {
     subscript(safe index: Int) -> Element? {

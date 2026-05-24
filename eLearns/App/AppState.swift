@@ -111,6 +111,11 @@ class AppState: ObservableObject {
         saveAll()
     }
 
+    func deleteLogEntry(_ entry: LogEntry) {
+        logEntries.removeAll { $0.id == entry.id }
+        saveAll()
+    }
+
     func totalDayMinutes() -> Int {
         logEntries.filter { !$0.isNight }.reduce(0) { $0 + $1.durationMinutes }
         + profile.initialDayMinutes
