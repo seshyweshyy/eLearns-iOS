@@ -174,14 +174,94 @@ struct SavedRoute: Codable, Identifiable {
 
 // MARK: - Log Entry
 
+enum WeatherCondition: String, Codable, CaseIterable, Identifiable {
+    case fine, rain, snow, icy, fog
+    var id: String { rawValue }
+    var displayName: String { rawValue.capitalized }
+    var icon: String {
+        switch self {
+        case .fine: return "sun.max.fill"
+        case .rain: return "cloud.rain.fill"
+        case .snow: return "cloud.snow.fill"
+        case .icy: return "snowflake"
+        case .fog: return "cloud.fog.fill"
+        }
+    }
+}
+
+enum TrafficLevel: String, Codable, CaseIterable, Identifiable {
+    case light, moderate, heavy
+    var id: String { rawValue }
+    var displayName: String { rawValue.capitalized }
+    var icon: String {
+        switch self {
+        case .light: return "car"
+        case .moderate: return "car.2"
+        case .heavy: return "car.2.fill"
+        }
+    }
+}
+
+enum DriveFeel: String, Codable, CaseIterable, Identifiable {
+    case awful, bad, meh, good, great
+    var id: String { rawValue }
+    var displayName: String { rawValue.capitalized }
+    var icon: String {
+        switch self {
+        case .awful: return "hand.thumbsdown.fill"
+        case .bad:   return "hand.thumbsdown"
+        case .meh:   return "minus.circle.fill"
+        case .good:  return "hand.thumbsup"
+        case .great: return "hand.thumbsup.fill"
+        }
+    }
+}
+
+enum LogRoadType: String, Codable, CaseIterable, Identifiable {
+    case sealed, unsealed, quietStreet, mainRoad, multiLaned
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .sealed:      return "Sealed"
+        case .unsealed:    return "Unsealed"
+        case .quietStreet: return "Quiet Street"
+        case .mainRoad:    return "Main Road"
+        case .multiLaned:  return "Multi-laned"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .sealed:      return "road.lanes"
+        case .unsealed:    return "mountain.2"
+        case .quietStreet: return "house"
+        case .mainRoad:    return "light.beacon.max"
+        case .multiLaned:  return "arrow.up.and.down.and.arrow.left.and.right"
+        }
+    }
+}
+
 struct LogEntry: Codable, Identifiable {
     var id: UUID = UUID()
     var date: Date = Date()
-    var durationMinutes: Int
-    var distanceKm: Double
-    var isNight: Bool
-    var supervisorName: String
-    var roadTypes: [String]
-    var notes: String
+    var startTime: Date = Date()
+    var endTime: Date = Date().addingTimeInterval(1800)
+    var startSuburb: String = ""
+    var endSuburb: String = ""
+    var startOdometer: Double = 0
+    var endOdometer: Double = 0
+    var isNight: Bool = false
+    var supervisorName: String = ""
+    var weather: WeatherCondition = .fine
+    var roadTypes: Set<LogRoadType> = []
+    var traffic: TrafficLevel = .light
+    var feel: DriveFeel = .good
+    var notes: String = ""
     var attachedRouteId: UUID?
+
+    var durationMinutes: Int {
+        max(0, Int(endTime.timeIntervalSince(startTime) / 60))
+    }
+    var distanceKm: Double {
+        max(0, endOdometer - startOdometer)
+    }
 }

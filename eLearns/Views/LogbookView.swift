@@ -124,6 +124,7 @@ struct LogbookView: View {
     }
 
     private func logEntryCard(_ entry: LogEntry) -> some View {
+        NavigationLink(destination: LogEntryDetailView(entry: entry)) {
         HStack(spacing: 14) {
             // Night/day indicator
             Image(systemName: entry.isNight ? "moon.stars.fill" : "sun.max.fill")
@@ -142,7 +143,10 @@ struct LogbookView: View {
                     Text("\(entry.durationMinutes) min")
                     Text("·")
                     Text(String(format: "%.1f km", entry.distanceKm))
-                    if !entry.supervisorName.isEmpty {
+                    if !entry.startSuburb.isEmpty {
+                        Text("·")
+                        Text(entry.startSuburb)
+                    } else if !entry.supervisorName.isEmpty {
                         Text("·")
                         Text(entry.supervisorName)
                     }
@@ -161,6 +165,8 @@ struct LogbookView: View {
         .padding(.vertical, 12)
         .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
     }
+    .buttonStyle(.plain)
+}
 
     // MARK: - Empty state
 
@@ -190,36 +196,187 @@ struct AddLogEntryView: View {
     @EnvironmentObject var appState: AppState
 
     @State private var date = Date()
-    @State private var durationMinutes = 30
-    @State private var distanceKm = ""
+    @State private var startTime = Date()
+    @State private var endTime = Date().addingTimeInterval(1800)
+    @State private var startSuburb = ""
+    @State private var endSuburb = ""
+    @State private var startOdometer = ""
+    @State private var endOdometer = ""
     @State private var isNight = false
     @State private var supervisor = ""
+    @State private var weather: WeatherCondition = .fine
+    @State private var roadTypes: Set<LogRoadType> = []
+    @State private var traffic: TrafficLevel = .light
+    @State private var feel: DriveFeel = .good
     @State private var notes = ""
+    @State private var showStartSuggestions = false
+    @State private var showEndSuggestions = false
+    @FocusState private var startSuburbFocused: Bool
+    @FocusState private var endSuburbFocused: Bool
+    @StateObject private var placesService = PlacesSearchService()
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Drive details") {
-                    DatePicker("Date", selection: $date, displayedComponents: .date)
-                    Stepper("Duration: \(durationMinutes) min", value: $durationMinutes, in: 1...480)
-                    HStack {
-                        Text("Distance (km)")
-                        Spacer()
-                        TextField("0.0", text: $distanceKm)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Date & time
+                    formSection(title: "Date & time") {
+                        VStack(spacing: 0) {
+                            formRow {
+                                DatePicker("Date", selection: $date, displayedComponents: .date)
+                                    .tint(Color("AccentGold"))
+                            }
+                            Divider().padding(.leading, 16)
+                            formRow {
+                                DatePicker("Start time", selection: $startTime, displayedComponents: .hourAndMinute)
+                                    .tint(Color("AccentGold"))
+                            }
+                            Divider().padding(.leading, 16)
+                            formRow {
+                                DatePicker("End time", selection: $endTime, displayedComponents: .hourAndMinute)
+                                    .tint(Color("AccentGold"))
+                            }
+                            Divider().padding(.leading, 16)
+                            formRow {
+                                Toggle("Night drive", isOn: $isNight)
+                                    .tint(Color("AccentGold"))
+                            }
+                        }
                     }
-                    Toggle("Night drive", isOn: $isNight)
-                }
 
-                Section("Supervisor") {
-                    TextField("Supervisor name", text: $supervisor)
-                }
+                    // Location
+                    formSection(title: "Location") {
+                        VStack(spacing: 0) {
+                            formRow {
+                                HStack {
+                                    Text("Start suburb")
+                                        .font(.system(size: 15))
+                                    Spacer()
+                                    TextField("Required", text: $startSuburb)
+                                        .multilineTextAlignment(.trailing)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(.secondary)
+                                        .onChange(of: startSuburb) { val in
+                                            guard startSuburbFocused else { return }
+                                            Task { await placesService.search(val, near: nil) }
+                                            showStartSuggestions = true
+                                        }
+                                        .focused($startSuburbFocused)
+                                }
+                            }
+                            if showStartSuggestions && startSuburbFocused && !placesService.suggestions.isEmpty {
+                                suburbSuggestions(for: $startSuburb, focused: $startSuburbFocused, show: $showStartSuggestions)
+                            }
+                            Divider().padding(.leading, 16)
+                            formRow {
+                                HStack {
+                                    Text("End suburb")
+                                        .font(.system(size: 15))
+                                    Spacer()
+                                    TextField("Required", text: $endSuburb)
+                                        .multilineTextAlignment(.trailing)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(.secondary)
+                                        .onChange(of: endSuburb) { val in
+                                            guard endSuburbFocused else { return }
+                                            Task { await placesService.search(val, near: nil) }
+                                            showEndSuggestions = true
+                                        }
+                                        .focused($endSuburbFocused)
+                                }
+                            }
+                            if showEndSuggestions && endSuburbFocused && !placesService.suggestions.isEmpty {
+                                suburbSuggestions(for: $endSuburb, focused: $endSuburbFocused, show: $showEndSuggestions)
+                            }
+                        }
+                    }
 
-                Section("Notes") {
-                    TextField("Optional notes", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
+                    // Odometer
+                    formSection(title: "Odometer") {
+                        VStack(spacing: 0) {
+                            formRow {
+                                HStack {
+                                    Text("Start (km)")
+                                        .font(.system(size: 15))
+                                    Spacer()
+                                    TextField("0", text: $startOdometer)
+                                        .keyboardType(.decimalPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Divider().padding(.leading, 16)
+                            formRow {
+                                HStack {
+                                    Text("End (km)")
+                                        .font(.system(size: 15))
+                                    Spacer()
+                                    TextField("0", text: $endOdometer)
+                                        .keyboardType(.decimalPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    // Supervisor
+                    formSection(title: "Supervisor") {
+                        formRow {
+                            HStack {
+                                Text("Name")
+                                    .font(.system(size: 15))
+                                Spacer()
+                                TextField("Required", text: $supervisor)
+                                    .multilineTextAlignment(.trailing)
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    // Weather
+                    formSection(title: "Weather") {
+                        iconPickerGrid(items: WeatherCondition.allCases, selected: Binding(
+                            get: { weather },
+                            set: { weather = $0 }
+                        ))
+                    }
+
+                    // Road types
+                    formSection(title: "Road types") {
+                        multiIconGrid(items: LogRoadType.allCases, selected: $roadTypes)
+                    }
+
+                    // Traffic
+                    formSection(title: "Traffic") {
+                        iconPickerGrid(items: TrafficLevel.allCases, selected: Binding(
+                            get: { traffic },
+                            set: { traffic = $0 }
+                        ))
+                    }
+
+                    // Feel
+                    formSection(title: "How did it feel?") {
+                        iconPickerGrid(items: DriveFeel.allCases, selected: Binding(
+                            get: { feel },
+                            set: { feel = $0 }
+                        ))
+                    }
+
+                    // Notes
+                    formSection(title: "Notes") {
+                        formRow {
+                            TextField("Optional notes", text: $notes, axis: .vertical)
+                                .font(.system(size: 15))
+                                .lineLimit(3...6)
+                        }
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
             }
             .navigationTitle("Log Drive")
             .navigationBarTitleDisplayMode(.inline)
@@ -230,6 +387,7 @@ struct AddLogEntryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { save() }
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color("AccentGold"))
                 }
             }
         }
@@ -238,17 +396,339 @@ struct AddLogEntryView: View {
         }
     }
 
+    // MARK: - Section container
+
+    private func formSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
+            content()
+                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private func formRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+    }
+
+    // MARK: - Single-select icon grid
+
+    private func iconPickerGrid<T: CaseIterable & Identifiable & Equatable>(
+        items: [T],
+        selected: Binding<T>
+    ) -> some View where T: HasDisplayInfo {
+        HStack(spacing: 8) {
+            ForEach(items) { item in
+                let isSelected = selected.wrappedValue == item
+                Button {
+                    selected.wrappedValue = item
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(isSelected ? Color("AccentGold") : .secondary)
+                            .frame(width: 44, height: 44)
+                        Text(item.displayName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(isSelected ? Color("AccentGold") : .secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        isSelected ? Color("AccentGold").opacity(0.15) : Color.secondary.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(isSelected ? Color("AccentGold").opacity(0.5) : Color.clear, lineWidth: 1.5)
+                    )
+                }
+                .buttonStyle(.glassRounded(cornerRadius: 12))
+                .animation(.spring(duration: 0.2), value: isSelected)
+            }
+        }
+        .padding(12)
+    }
+
+    // MARK: - Multi-select icon grid
+
+    private func multiIconGrid(
+        items: [LogRoadType],
+        selected: Binding<Set<LogRoadType>>
+    ) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+            ForEach(items) { item in
+                let isSelected = selected.wrappedValue.contains(item)
+                Button {
+                    if isSelected {
+                        selected.wrappedValue.remove(item)
+                    } else {
+                        selected.wrappedValue.insert(item)
+                    }
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(isSelected ? Color("AccentGold") : .secondary)
+                            .frame(width: 44, height: 44)
+                        Text(item.displayName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(isSelected ? Color("AccentGold") : .secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        isSelected ? Color("AccentGold").opacity(0.15) : Color.secondary.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(isSelected ? Color("AccentGold").opacity(0.5) : Color.clear, lineWidth: 1.5)
+                    )
+                }
+                .buttonStyle(.glassRounded(cornerRadius: 12))
+                .animation(.spring(duration: 0.2), value: isSelected)
+            }
+        }
+        .padding(12)
+    }
+
+    // MARK: - Save
+
     private func save() {
-        let entry = LogEntry(
-            date: date,
-            durationMinutes: durationMinutes,
-            distanceKm: Double(distanceKm) ?? 0,
-            isNight: isNight,
-            supervisorName: supervisor,
-            roadTypes: [],
-            notes: notes
-        )
+        var entry = LogEntry()
+        entry.date = date
+        entry.startTime = startTime
+        entry.endTime = endTime
+        entry.startSuburb = startSuburb
+        entry.endSuburb = endSuburb
+        entry.startOdometer = Double(startOdometer) ?? 0
+        entry.endOdometer = Double(endOdometer) ?? 0
+        entry.isNight = isNight
+        entry.supervisorName = supervisor
+        entry.weather = weather
+        entry.roadTypes = roadTypes
+        entry.traffic = traffic
+        entry.feel = feel
+        entry.notes = notes
         onSave(entry)
         dismiss()
+    }
+    
+    private func suburbSuggestions(
+        for text: Binding<String>,
+        focused: FocusState<Bool>.Binding,
+        show: Binding<Bool>
+    ) -> some View {
+        VStack(spacing: 0) {
+            ForEach(placesService.suggestions.prefix(3)) { place in
+                Button {
+                    text.wrappedValue = place.title
+                    show.wrappedValue = false
+                    focused.wrappedValue = false
+                    placesService.clear()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundStyle(Color("AccentGold"))
+                            .font(.system(size: 14))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(place.title)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            if !place.subtitle.isEmpty {
+                                Text(place.subtitle)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                if place.id != placesService.suggestions.prefix(3).last?.id {
+                    Divider().padding(.leading, 40)
+                }
+            }
+        }
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .animation(.easeInOut(duration: 0.15), value: placesService.suggestions.count)
+    }
+}
+
+// MARK: - Protocol for icon grid items
+
+protocol HasDisplayInfo {
+    var displayName: String { get }
+    var icon: String { get }
+}
+
+extension WeatherCondition: HasDisplayInfo {}
+extension TrafficLevel: HasDisplayInfo {}
+extension DriveFeel: HasDisplayInfo {}
+extension LogRoadType: HasDisplayInfo {}
+
+// MARK: - Logs Viewing
+struct LogEntryDetailView: View {
+    var entry: LogEntry
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+
+                // Header
+                HStack(spacing: 14) {
+                    Image(systemName: entry.isNight ? "moon.stars.fill" : "sun.max.fill")
+                        .foregroundStyle(entry.isNight ? .indigo : .yellow)
+                        .font(.system(size: 22))
+                        .frame(width: 48, height: 48)
+                        .background(
+                            (entry.isNight ? Color.indigo : Color.yellow).opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.date.formatted(date: .long, time: .omitted))
+                            .font(.system(size: 17, weight: .semibold))
+                        Text(entry.isNight ? "Night drive" : "Day drive")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+
+                // Stats
+                HStack(spacing: 0) {
+                    statBox(value: "\(entry.durationMinutes)", unit: "min")
+                    Divider().frame(height: 36).padding(.horizontal, 8)
+                    statBox(value: String(format: "%.1f", entry.distanceKm), unit: "km")
+                    Divider().frame(height: 36).padding(.horizontal, 8)
+                    statBox(value: entry.startTime.formatted(date: .omitted, time: .shortened), unit: "start")
+                    Divider().frame(height: 36).padding(.horizontal, 8)
+                    statBox(value: entry.endTime.formatted(date: .omitted, time: .shortened), unit: "end")
+                }
+                .padding(.vertical, 14)
+                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+
+                // Details rows
+                detailSection(title: "Location") {
+                    if !entry.startSuburb.isEmpty || !entry.endSuburb.isEmpty {
+                        detailRow(icon: "mappin.circle", label: "Start", value: entry.startSuburb.isEmpty ? "—" : entry.startSuburb)
+                        Divider().padding(.leading, 44)
+                        detailRow(icon: "mappin.circle.fill", label: "End", value: entry.endSuburb.isEmpty ? "—" : entry.endSuburb)
+                    } else {
+                        detailRow(icon: "mappin.slash", label: "No suburbs logged", value: "")
+                    }
+                }
+
+                detailSection(title: "Odometer") {
+                    detailRow(icon: "gauge", label: "Start", value: String(format: "%.0f km", entry.startOdometer))
+                    Divider().padding(.leading, 44)
+                    detailRow(icon: "gauge.with.dots.needle.100percent", label: "End", value: String(format: "%.0f km", entry.endOdometer))
+                }
+
+                detailSection(title: "Supervisor") {
+                    detailRow(icon: "person.2", label: "Name", value: entry.supervisorName.isEmpty ? "—" : entry.supervisorName)
+                }
+
+                detailSection(title: "Conditions") {
+                    detailRow(icon: entry.weather.icon, label: "Weather", value: entry.weather.displayName)
+                    Divider().padding(.leading, 44)
+                    detailRow(icon: entry.traffic.icon, label: "Traffic", value: entry.traffic.displayName)
+                    Divider().padding(.leading, 44)
+                    detailRow(icon: entry.feel.icon, label: "Feel", value: entry.feel.displayName)
+                }
+
+                if !entry.roadTypes.isEmpty {
+                    detailSection(title: "Road types") {
+                        FlowLayout(items: Array(entry.roadTypes)) { type in
+                            Label(type.displayName, systemImage: type.icon)
+                                .font(.system(size: 12, weight: .medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color("AccentGold").opacity(0.1), in: Capsule())
+                                .foregroundStyle(Color("AccentGold"))
+                        }
+                        .padding(14)
+                    }
+                }
+
+                if !entry.notes.isEmpty {
+                    detailSection(title: "Notes") {
+                        Text(entry.notes)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .navigationTitle("Drive Details")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func statBox(value: String, unit: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+            Text(unit)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
+            VStack(spacing: 0) {
+                content()
+            }
+            .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15))
+                .foregroundStyle(Color("AccentGold"))
+                .frame(width: 28)
+            Text(label)
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
     }
 }

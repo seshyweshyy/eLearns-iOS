@@ -115,13 +115,25 @@ struct ProfileView: View {
 
             // Appearance
             settingRow(icon: appState.theme.icon, label: "Appearance") {
-                Picker("", selection: $appState.theme) {
+                Menu {
                     ForEach(AppTheme.allCases, id: \.self) { theme in
-                        Label(theme.displayName, systemImage: theme.icon).tag(theme)
+                        Button {
+                            appState.theme = theme
+                        } label: {
+                            Label(theme.displayName, systemImage: theme.icon)
+                        }
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: appState.theme.icon)
+                            .font(.system(size: 12))
+                        Text(appState.theme.displayName)
+                            .font(.system(size: 14))
+                    }
+                    .foregroundStyle(Color("AccentGold"))
+                    .frame(minWidth: 110, alignment: .trailing)
+                    .animation(nil, value: appState.theme)
                 }
-                .pickerStyle(.menu)
-                .tint(Color("AccentGold"))
             }
 
             // Licence
