@@ -9,67 +9,77 @@ struct NavigationOverlayView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-
-            // MARK: - Turn instruction card
             turnCard
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
-            // MARK: - Bottom info bar
             bottomBar
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 12)
         }
         .alert("Stop Navigation?", isPresented: $showStopConfirm) {
-            Button("Stop", role: .destructive) { onStop() }
+            Button("Stop", role: .destructive) {
+                onStop()
+            }
             Button("Continue", role: .cancel) { }
         } message: {
             Text("Your current drive progress will not be saved.")
         }
+        .onChange(of: showStopConfirm) { _ in }
     }
 
     // MARK: - Turn instruction card
 
     private var turnCard: some View {
-        HStack(spacing: 14) {
-            // Turn arrow icon
-            Image(systemName: turnIconName)
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color("AccentGold"))
-                .frame(width: 44, height: 44)
-                .background(Color("AccentGold").opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        ZStack(alignment: .trailing) {
+            HStack(spacing: 14) {
+                Image(systemName: turnIconName)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color("AccentGold"))
+                    .frame(width: 44, height: 44)
+                    .background(Color("AccentGold").opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(currentInstruction)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(currentInstruction)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
 
-                if navService.remainingDistanceKm > 0 {
-                    Text(distanceString)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                    if navService.remainingDistanceKm > 0 {
+                        Text(distanceString)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
                 }
+
+                Spacer()
+
+                // Spacer to reserve space for the button
+                Color.clear
+                    .frame(width: 36, height: 36)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .modifier(GlassPanelModifier(cornerRadius: 24))
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
 
-            Spacer()
-
-            // Stop button — glass on iOS 26+, material fallback below
+            // Button sits outside the glassEffect layer so it receives touches
             Button {
-                showStopConfirm = true
+                DispatchQueue.main.async {
+                    showStopConfirm = true
+                }
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
-                    .padding(8)
+                    .frame(width: 32, height: 32)
+                    .background(Color.secondary.opacity(0.2), in: Circle())
             }
-            .modifier(GlassCircleButtonModifier())
+            .buttonStyle(.plain)
+            .padding(12)
+            .contentShape(Circle().inset(by: -10))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .modifier(GlassPanelModifier(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
     }
 
     // MARK: - Bottom bar (speed, ETA, remaining)
@@ -115,7 +125,7 @@ struct NavigationOverlayView: View {
             .frame(maxWidth: .infinity)
         }
         .padding(.vertical, 14)
-        .modifier(GlassPanelModifier(cornerRadius: 16))
+        .modifier(GlassPanelModifier(cornerRadius: 24))
         .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
     }
 

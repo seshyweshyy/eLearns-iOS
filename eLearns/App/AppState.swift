@@ -58,6 +58,7 @@ class AppState: ObservableObject {
     @Published var savedRoutes: [SavedRoute] = []
     @Published var currentRoute: GeneratedRoute? = nil
     @Published var isNavigating: Bool = false
+    @Published var pendingWaypoints: [Waypoint] = []
 
     // MARK: - Logbook
     @Published var logEntries: [LogEntry] = []

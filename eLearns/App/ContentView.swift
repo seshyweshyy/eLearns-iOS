@@ -8,12 +8,13 @@ struct ContentView: View {
             MapTabView()
                 .tabItem {
                     Label("Map", systemImage: "map.fill")
+
                 }
                 .tag(AppTab.map)
 
             LogbookView()
                 .tabItem {
-                    Label("Logbook", systemImage: "book.fill")
+                    Label("Logbook", systemImage: "book")
                 }
                 .tag(AppTab.logbook)
 
@@ -25,7 +26,7 @@ struct ContentView: View {
 
             ProfileView()
                 .tabItem {
-                    Label("Profile", systemImage: "person.fill")
+                    Label("Profile", systemImage: "person")
                 }
                 .tag(AppTab.profile)
         }

@@ -4,9 +4,10 @@ import CoreLocation
 
 struct MapTabView: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var locationService = LocationService.shared
-    @StateObject private var routeService   = RouteService.shared
-    @StateObject private var navService     = NavigationService.shared
+    @StateObject private var locationService  = LocationService.shared
+    @StateObject private var routeService     = RouteService.shared
+    @StateObject private var navService       = NavigationService.shared
+    @StateObject private var placesService    = PlacesSearchService.shared
 
     @State private var showWizard       = false
     @State private var showRoutePreview = false
@@ -17,6 +18,10 @@ struct MapTabView: View {
     @State private var generatedRoutes: [GeneratedRoute] = []
     @State private var selectedRouteIndex = 0
     @State private var errorMessage: String? = nil
+    @State private var pinnedPlace: PlaceResult? = nil
+    @State private var showWaypointConfirm = false
+    @State private var pendingWaypoint: PlaceResult? = nil
+    @State private var showHandoverWarning = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -43,6 +48,16 @@ struct MapTabView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 6)
                     }
+
+                    SearchSuggestionsView(
+                        suggestions: placesService.suggestions,
+                        isLoading: placesService.isLoading,
+                        onSelect: handleRouteHere,
+                        onAddWaypoint: handleAddWaypoint
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+
                     Spacer()
                 }
             }
@@ -72,11 +87,30 @@ struct MapTabView: View {
         .sheet(isPresented: $showWizard) {
             RouteWizardView(onGenerate: handleGeneratedRoutes)
         }
+        .overlay {
+            if showHandoverWarning {
+                HandoverWarningView(
+                    onConfirm: {
+                        withAnimation(.spring(duration: 0.3)) {
+                            showHandoverWarning = false
+                        }
+                        showRoutePreview = false
+                        startNavigation()
+                    },
+                    onCancel: {
+                        withAnimation(.spring(duration: 0.3)) {
+                            showHandoverWarning = false
+                        }
+                    }
+                )
+                .animation(.spring(duration: 0.3), value: showHandoverWarning)
+            }
+        }
         .sheet(isPresented: $showRoutePreview) {
             if let route = appState.currentRoute {
                 RoutePreviewSheet(
                     route: route,
-                    onStartDrive: startNavigation,
+                    onStartDrive: confirmAndStartNavigation,
                     onSave: saveRoute,
                     onDismiss: { showRoutePreview = false }
                 )
@@ -84,6 +118,27 @@ struct MapTabView: View {
         }
         .onAppear {
             locationService.requestPermission()
+        }
+        .onChange(of: searchText) { newValue in
+            guard !newValue.isEmpty else {
+                placesService.clear()
+                return
+            }
+            Task {
+                await placesService.search(newValue, near: locationService.currentLocation?.coordinate)
+            }
+        }
+        .confirmationDialog(
+            "Add \"\(pendingWaypoint?.title ?? "")\" as a waypoint?",
+            isPresented: $showWaypointConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Add Waypoint") {
+                if let place = pendingWaypoint {
+                    addWaypointToWizard(place)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
         }
     }
 
@@ -111,6 +166,7 @@ struct MapTabView: View {
                 Button {
                     searchText = ""
                     searchFocused = false
+                    placesService.clear()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
@@ -189,8 +245,9 @@ struct MapTabView: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(8)
+                        .contentShape(Circle())
                 }
-                .modifier(GlassCircleButtonModifier())
+                .buttonStyle(.glassCircle)
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -208,11 +265,12 @@ struct MapTabView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
+                    .foregroundStyle(.primary)
                 }
-                .modifier(GlassButtonModifier(cornerRadius: 12))
+                .buttonStyle(.glassRounded(cornerRadius: 20))
 
                 Button {
-                    startNavigation()
+                    confirmAndStartNavigation()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "play.fill")
@@ -224,8 +282,9 @@ struct MapTabView: View {
                     .padding(.vertical, 13)
                     .background(Color("AccentGold"))
                     .foregroundStyle(.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
                 }
+                .buttonStyle(.glassRounded)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
@@ -256,10 +315,15 @@ struct MapTabView: View {
     private func startNavigation() {
         guard let route = appState.currentRoute else { return }
         appState.isNavigating = true
+        let viaWaypoints = routeService.navigationWaypoints(for: route, sampleCount: 6)
         navService.startNavigation(
             to: route.endCoordinate.coordinate,
-            via: route.waypoints.map { $0.coordinate }
+            via: viaWaypoints
         )
+    }
+
+    private func confirmAndStartNavigation() {
+        showHandoverWarning = true
     }
 
     private func stopNavigation() {
@@ -271,5 +335,62 @@ struct MapTabView: View {
         guard let route = appState.currentRoute else { return }
         let name = "Route \(appState.savedRoutes.count + 1) — \(Date().formatted(date: .abbreviated, time: .omitted))"
         appState.saveRoute(route, name: name)
+    }
+    
+    private func handlePlaceSelect(_ place: PlaceResult) {
+        // do nothing — actions handled by buttons in the row
+    }
+
+    private func handleAddWaypoint(_ place: PlaceResult) {
+        Task {
+            guard let coord = await placesService.fetchCoordinate(for: place.id) else { return }
+            let waypoint = Waypoint(
+                name: place.title,
+                latitude: coord.latitude,
+                longitude: coord.longitude
+            )
+            appState.pendingWaypoints.append(waypoint)
+            searchText = ""
+            searchFocused = false
+            placesService.clear()
+            showWizard = true
+        }
+    }
+
+    private func handleRouteHere(_ place: PlaceResult) {
+        Task {
+            guard let coord = await placesService.fetchCoordinate(for: place.id) else { return }
+            NavigationService.shared.mapView?.animate(to: GMSCameraPosition(
+                target: coord,
+                zoom: 15
+            ))
+            searchText = ""
+            searchFocused = false
+            placesService.clear()
+            // Open wizard with destination pre-set as waypoint
+            let waypoint = Waypoint(
+                name: place.title,
+                latitude: coord.latitude,
+                longitude: coord.longitude
+            )
+            appState.pendingWaypoints = [waypoint]
+            showWizard = true
+        }
+    }
+
+    private func addWaypointToWizard(_ place: PlaceResult) {
+        Task {
+            guard let coord = await placesService.fetchCoordinate(for: place.id) else { return }
+            let waypoint = Waypoint(
+                name: place.title,
+                latitude: coord.latitude,
+                longitude: coord.longitude
+            )
+            // Pre-populate wizard preferences and open it
+            appState.pendingWaypoints.append(waypoint)
+            searchText = ""
+            placesService.clear()
+            showWizard = true
+        }
     }
 }

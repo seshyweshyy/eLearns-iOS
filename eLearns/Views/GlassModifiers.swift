@@ -141,3 +141,34 @@ struct GlassCircleButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == GlassCircleButtonStyle {
     static var glassCircle: GlassCircleButtonStyle { GlassCircleButtonStyle() }
 }
+
+// MARK: - Interactive glass rounded rectangle button style
+
+struct GlassRoundedButtonStyle: ButtonStyle {
+    var cornerRadius: CGFloat = 20
+
+    func makeBody(configuration: Configuration) -> some View {
+        if #available(iOS 26, *) {
+            configuration.label
+                .glassEffect(
+                    .regular.interactive(),
+                    in: RoundedRectangle(cornerRadius: cornerRadius)
+                )
+                .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+                .animation(.spring(duration: 0.2), value: configuration.isPressed)
+        } else {
+            configuration.label
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+                .opacity(configuration.isPressed ? 0.85 : 1.0)
+                .animation(.spring(duration: 0.2), value: configuration.isPressed)
+        }
+    }
+}
+
+extension ButtonStyle where Self == GlassRoundedButtonStyle {
+    static var glassRounded: GlassRoundedButtonStyle { GlassRoundedButtonStyle() }
+    static func glassRounded(cornerRadius: CGFloat) -> GlassRoundedButtonStyle {
+        GlassRoundedButtonStyle(cornerRadius: cornerRadius)
+    }
+}

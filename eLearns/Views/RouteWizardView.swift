@@ -12,6 +12,8 @@ struct RouteWizardView: View {
     @State private var prefs = RoutePreferences()
     @State private var isGenerating = false
     @State private var errorMessage: String? = nil
+    @State private var showWaypointSearch = false
+    @StateObject private var routeService = RouteService.shared
 
     private let totalSteps = 4
 
@@ -50,6 +52,13 @@ struct RouteWizardView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .onAppear {
+            if !appState.pendingWaypoints.isEmpty {
+                prefs.waypoints = appState.pendingWaypoints
+                appState.pendingWaypoints = []
+                step = 2 // jump straight to waypoints step so user sees them
+            }
+        }
     }
 
     // MARK: - Progress bar
@@ -139,7 +148,7 @@ struct RouteWizardView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(isSelected ? Color("AccentGold") : .secondary)
                     .frame(width: 32)
-
+                
                 VStack(alignment: .leading, spacing: 2) {
                     Text(type.displayName)
                         .font(.system(size: 15, weight: .medium))
@@ -148,31 +157,25 @@ struct RouteWizardView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
-
+                
                 Spacer()
-
+                
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? Color("AccentGold") : .secondary)
                     .font(.system(size: 20))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(
-                isSelected
-                    ? Color("AccentGold").opacity(0.08)
-                    : Color.secondary.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 20)
-            )
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
                     .strokeBorder(
-                        isSelected ? Color("AccentGold").opacity(0.3) : .clear,
+                        isSelected ? Color("AccentGold").opacity(0.5) : Color("AccentGold").opacity(0.12),
                         lineWidth: 1
                     )
             )
         }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.15), value: isSelected)
+            .buttonStyle(.glassRounded)
+            .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
 
     // MARK: - Step 1: Radius & duration
@@ -271,7 +274,7 @@ struct RouteWizardView: View {
             }
 
             Button {
-                // TODO: open place search sheet
+                showWaypointSearch = true
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
@@ -279,8 +282,13 @@ struct RouteWizardView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                 .foregroundStyle(Color("AccentGold"))
+            }
+            .buttonStyle(.glassPill)
+            .sheet(isPresented: $showWaypointSearch) {
+                WaypointSearchSheet { waypoint in
+                    prefs.waypoints.append(waypoint)
+                }
             }
         }
     }
@@ -292,7 +300,16 @@ struct RouteWizardView: View {
                 .font(.system(size: 20))
             Text(wp.name)
                 .font(.system(size: 15))
+                .lineLimit(1)
             Spacer()
+            Button {
+                prefs.waypoints.removeAll { $0.id == wp.id }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 20))
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -349,44 +366,78 @@ struct RouteWizardView: View {
     // MARK: - Bottom buttons
 
     private var bottomButtons: some View {
-        HStack(spacing: 12) {
-            if step > 0 {
-                Button {
-                    withAnimation { step -= 1 }
-                } label: {
-                    Text("Back")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .foregroundStyle(.primary)
+        VStack(spacing: 10) {
+
+            // Progress bar — only visible while generating
+            if isGenerating {
+                VStack(spacing: 6) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.secondary.opacity(0.2))
+                                .frame(height: 6)
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color("AccentGold"))
+                                .frame(width: geo.size.width * routeService.generationProgress, height: 6)
+                                .animation(.easeInOut(duration: 0.4), value: routeService.generationProgress)
+                        }
+                    }
+                    .frame(height: 6)
+
+                    HStack {
+                        Text("Finding best routes…")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(Int(routeService.generationProgress * 100))%")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color("AccentGold"))
+                    }
                 }
-                .buttonStyle(.glassPill)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .transition(.opacity)
             }
 
-            Button {
-                if step < totalSteps - 1 {
-                    withAnimation { step += 1 }
-                } else {
-                    generateRoutes()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if isGenerating {
-                        ProgressView()
-                            .tint(.black)
-                            .scaleEffect(0.85)
+            HStack(spacing: 12) {
+                if step > 0 {
+                    Button {
+                        withAnimation { step -= 1 }
+                    } label: {
+                        Text("Back")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .foregroundStyle(.primary)
                     }
-                    Text(step == totalSteps - 1 ? (isGenerating ? "Generating…" : "Generate") : "Next")
-                        .font(.system(size: 16, weight: .semibold))
+                    .buttonStyle(.glassPill)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .foregroundStyle(canAdvance ? .black : .secondary)
-                .background(canAdvance ? Color("AccentGold") : Color.secondary.opacity(0.3))
-                .clipShape(Capsule())
+
+                Button {
+                    if step < totalSteps - 1 {
+                        withAnimation { step += 1 }
+                    } else {
+                        generateRoutes()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if isGenerating {
+                            ProgressView()
+                                .tint(.black)
+                                .scaleEffect(0.85)
+                        }
+                        Text(step == totalSteps - 1 ? (isGenerating ? "Generating…" : "Generate") : "Next")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .foregroundStyle(canAdvance ? .black : .secondary)
+                    .background(canAdvance ? Color("AccentGold") : Color.secondary.opacity(0.3))
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.glassPill)
-            .disabled(!canAdvance || isGenerating)
+                .disabled(!canAdvance || isGenerating)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
