@@ -52,7 +52,14 @@ struct ProfileView: View {
                     TextField("Your name", text: $appState.profile.name)
                         .font(.system(size: 18, weight: .semibold))
                         .multilineTextAlignment(.center)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 20))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .strokeBorder(Color("AccentGold").opacity(0.4), lineWidth: 1.5)
+                        )
                         .frame(maxWidth: 220)
                 } else {
                     Text(appState.profile.name.isEmpty ? "Set your name" : appState.profile.name)
