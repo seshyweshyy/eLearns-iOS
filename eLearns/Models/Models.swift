@@ -10,6 +10,7 @@ struct UserProfile: Codable {
     var supervisorName: String = ""
     var initialDayMinutes: Int = 0
     var initialNightMinutes: Int = 0
+    var avatarData: Data? = nil
 }
 
 enum LicenceType: String, Codable, CaseIterable {

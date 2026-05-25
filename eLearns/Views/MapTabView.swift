@@ -36,6 +36,32 @@ struct MapTabView: View {
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
 
+            // MARK: - Relocate button
+            if !appState.isNavigating {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Button {
+                            guard let coord = LocationService.shared.currentLocation?.coordinate else { return }
+                            NotificationCenter.default.post(
+                                name: .relocateToUserLocation,
+                                object: coord
+                            )
+                        } label: {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(Color("AccentGold"))
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.glassCircle)
+                        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+                        .padding(.leading, 16)
+                        .padding(.bottom, 100)
+                        Spacer()
+                    }
+                }
+            }
+
             // MARK: - Top search bar
             if !appState.isNavigating {
                 VStack(spacing: 0) {

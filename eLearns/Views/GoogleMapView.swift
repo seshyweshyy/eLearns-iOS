@@ -1,6 +1,7 @@
 import SwiftUI
 import GoogleMaps
 import GoogleNavigation
+import Combine
 
 struct GoogleMapView: UIViewRepresentable {
     var route: GeneratedRoute?
@@ -10,14 +11,18 @@ struct GoogleMapView: UIViewRepresentable {
     private let darkMapID = GMSMapID(identifier: "8e79201a670f4f6539b3d694")
 
     func makeUIView(context: Context) -> GMSMapView {
+        // Use last known location immediately if available, otherwise Sydney fallback
+        let startLocation = LocationService.shared.currentLocation?.coordinate
+        ?? CLLocationCoordinate2D(latitude: -33.8568, longitude: 151.2153)
+        
         let camera = GMSCameraPosition(
-            latitude: -33.8568,
-            longitude: 151.2153,
+            latitude: startLocation.latitude,
+            longitude: startLocation.longitude,
             zoom: 15
         )
-
+        
         let mapView = GMSMapView(frame: .zero, mapID: darkMapID, camera: camera)
-
+        
         mapView.settings.compassButton      = true
         mapView.settings.myLocationButton   = false
         mapView.isMyLocationEnabled         = true
@@ -25,18 +30,15 @@ struct GoogleMapView: UIViewRepresentable {
         mapView.settings.zoomGestures       = true
         mapView.settings.tiltGestures       = !isNavigating
         mapView.settings.rotateGestures     = true
-
-        // Enable 3D buildings
-        mapView.isBuildingsEnabled = true
-
-        // Shrink Google logo
+        mapView.isBuildingsEnabled          = true
+        
         if let logoView = mapView.subviews.first(where: { String(describing: type(of: $0)).contains("Logo") }) {
             logoView.transform = CGAffineTransform(scaleX: 0.65, y: 0.65)
         }
-
-        // Store reference so NavigationService can use it
+        
         NavigationService.shared.mapView = mapView
-
+        context.coordinator.startObservingLocation(mapView: mapView)
+        context.coordinator.startObservingRelocate(mapView: mapView)
         return mapView
     }
 
@@ -100,6 +102,32 @@ struct GoogleMapView: UIViewRepresentable {
     class Coordinator: NSObject {
         var lastRouteID: UUID? = nil
         var hasConfiguredNavCamera: Bool = false
+        private var cancellable: AnyCancellable?
+        private var relocateCancellable: AnyCancellable?
+        private var hasSnappedToLocation = false
+
+        func startObservingLocation(mapView: GMSMapView) {
+            cancellable = LocationService.shared.$currentLocation
+                .compactMap { $0 }
+                .first()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak mapView] location in
+                    guard let mapView, !self.hasSnappedToLocation else { return }
+                    self.hasSnappedToLocation = true
+                    mapView.animate(to: GMSCameraPosition(target: location.coordinate, zoom: 15))
+                }
+        }
+
+        func startObservingRelocate(mapView: GMSMapView) {
+            relocateCancellable = NotificationCenter.default
+                .publisher(for: .relocateToUserLocation)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak mapView] notification in
+                    guard let mapView,
+                          let coord = notification.object as? CLLocationCoordinate2D else { return }
+                    mapView.animate(to: GMSCameraPosition(target: coord, zoom: 16))
+                }
+        }
     }
 
     // MARK: - Draw route polyline + markers
@@ -172,6 +200,10 @@ struct GoogleMapView: UIViewRepresentable {
             str.draw(in: strRect)
         }
     }
+}
+
+extension Notification.Name {
+    static let relocateToUserLocation = Notification.Name("relocateToUserLocation")
 }
 
 // MARK: - Interactive glass bar (search bar, input fields)

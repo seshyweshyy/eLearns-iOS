@@ -1,8 +1,10 @@
 import SwiftUI
+import PhotosUI
 
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @State private var isEditing = false
+    @State private var selectedPhoto: PhotosPickerItem? = nil
 
     var body: some View {
         NavigationStack {
@@ -38,13 +40,40 @@ struct ProfileView: View {
     private var profileHeader: some View {
         VStack(spacing: 12) {
             // Avatar circle
-            ZStack {
-                Circle()
-                    .fill(Color("AccentGold").opacity(0.15))
-                    .frame(width: 72, height: 72)
-                Text(appState.profile.name.prefix(1).uppercased().isEmpty ? "L" : String(appState.profile.name.prefix(1).uppercased()))
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(Color("AccentGold"))
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                ZStack {
+                    Circle()
+                        .fill(Color("AccentGold").opacity(0.15))
+                        .frame(width: 72, height: 72)
+                    if let data = appState.profile.avatarData, let uiImage = UIImage(data: data) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 72, height: 72)
+                            .clipShape(Circle())
+                    } else {
+                        Text(appState.profile.name.prefix(1).uppercased().isEmpty ? "L" : String(appState.profile.name.prefix(1).uppercased()))
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(Color("AccentGold"))
+                    }
+                    // Camera badge
+                    if isEditing {
+                        Circle()
+                            .fill(Color("AccentGold"))
+                            .frame(width: 22, height: 22)
+                            .overlay(Image(systemName: "camera.fill").font(.system(size: 10)).foregroundStyle(.black))
+                            .offset(x: 24, y: 24)
+                    }
+                }
+            }
+            .disabled(!isEditing)
+            .onChange(of: selectedPhoto) { _, newItem in
+                Task {
+                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                        appState.profile.avatarData = data
+                        appState.saveAll()
+                    }
+                }
             }
 
             VStack(spacing: 4) {
@@ -145,6 +174,7 @@ struct ProfileView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .fixedSize()
                 } else {
                     Text(appState.profile.licenceType.displayName)
                         .foregroundStyle(.secondary)
