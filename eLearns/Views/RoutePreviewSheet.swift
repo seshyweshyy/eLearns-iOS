@@ -4,7 +4,10 @@ struct RoutePreviewSheet: View {
     var route: GeneratedRoute
     var onStartDrive: () -> Void
     var onSave: () -> Void
+    var onUnsave: () -> Void
     var onDismiss: () -> Void
+
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         NavigationStack {
@@ -93,6 +96,18 @@ struct RoutePreviewSheet: View {
             .navigationTitle("Route Preview")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        if appState.isRouteSaved(route) {
+                            onUnsave()
+                        } else {
+                            onSave()
+                        }
+                    } label: {
+                        Label("Save", systemImage: appState.isRouteSaved(route) ? "bookmark.fill" : "bookmark")
+                            .foregroundStyle(Color("AccentGold"))
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { onDismiss() }
                 }

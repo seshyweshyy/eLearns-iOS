@@ -43,6 +43,7 @@ struct LogbookView: View {
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
+                                    .tint(.red)
                                 }
                         }
                     }
@@ -50,6 +51,9 @@ struct LogbookView: View {
             }
             .listStyle(.plain)
             .navigationTitle("Logbook")
+            .navigationDestination(item: $selectedEntry) { entry in
+                LogEntryDetailView(entry: entry)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) {
@@ -81,8 +85,8 @@ struct LogbookView: View {
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(Color("AccentGold"))
                                 .frame(width: 34, height: 34)
+                                .buttonStyle(.glassCircle)
                         }
-                        .buttonStyle(.glassCircle)
                     }
                 }
             }
@@ -220,12 +224,6 @@ struct LogbookView: View {
             .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
-        .navigationDestination(isPresented: Binding(
-            get: { selectedEntry?.id == entry.id },
-            set: { if !$0 { selectedEntry = nil } }
-        )) {
-            LogEntryDetailView(entry: entry)
-        }
     }
 
     // MARK: - Empty state

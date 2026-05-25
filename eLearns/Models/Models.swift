@@ -241,7 +241,7 @@ enum LogRoadType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct LogEntry: Codable, Identifiable {
+struct LogEntry: Codable, Identifiable, Hashable {
     var id: UUID = UUID()
     var date: Date = Date()
     var startTime: Date = Date()

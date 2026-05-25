@@ -138,6 +138,7 @@ struct MapTabView: View {
                     route: route,
                     onStartDrive: confirmAndStartNavigation,
                     onSave: saveRoute,
+                    onUnsave: { appState.unsaveRoute(route) },
                     onDismiss: { showRoutePreview = false }
                 )
             }
@@ -145,13 +146,13 @@ struct MapTabView: View {
         .onAppear {
             locationService.requestPermission()
         }
-        .onChange(of: searchText) { newValue in
-            guard !newValue.isEmpty else {
+        .onChange(of: searchText) {
+            guard !searchText.isEmpty else {
                 placesService.clear()
                 return
             }
             Task {
-                await placesService.search(newValue, near: locationService.currentLocation?.coordinate)
+                await placesService.search(searchText, near: locationService.currentLocation?.coordinate)
             }
         }
         .confirmationDialog(
@@ -264,6 +265,20 @@ struct MapTabView: View {
                 Divider().frame(height: 24).padding(.horizontal, 12)
                 statPill(value: "\(route.steps.count)", unit: "turns")
                 Spacer()
+                Button {
+                    if appState.isRouteSaved(route) {
+                        appState.unsaveRoute(route)
+                    } else {
+                        saveRoute()
+                    }
+                } label: {
+                    Image(systemName: appState.isRouteSaved(route) ? "bookmark.fill" : "bookmark")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color("AccentGold"))
+                        .padding(8)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.glassCircle)
                 Button {
                     appState.currentRoute = nil
                 } label: {

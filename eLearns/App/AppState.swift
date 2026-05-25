@@ -138,4 +138,13 @@ class AppState: ObservableObject {
         savedRoutes.remove(atOffsets: offsets)
         saveAll()
     }
+
+    func unsaveRoute(_ route: GeneratedRoute) {
+        savedRoutes.removeAll { $0.route.id == route.id }
+        saveAll()
+    }
+
+    func isRouteSaved(_ route: GeneratedRoute) -> Bool {
+        savedRoutes.contains { $0.route.id == route.id }
+    }
 }
