@@ -103,19 +103,20 @@ class RouteService: ObservableObject {
         return routes
     }
 
-    // MARK: - Sample navigation waypoints from OSRM polyline for Google Navigation
+    // MARK: - Dense navigation waypoints — forces Google Nav to stay on the OSRM path
 
-    func navigationWaypoints(for route: GeneratedRoute, sampleCount: Int = 6) -> [CLLocationCoordinate2D] {
+    func navigationWaypoints(for route: GeneratedRoute, sampleCount: Int = 18) -> [CLLocationCoordinate2D] {
         guard let path = GMSPath(fromEncodedPath: route.polylinePoints) else {
             return route.waypoints.map { $0.coordinate }
         }
         let total = Int(path.count())
         guard total > 2 else { return [] }
 
-        let count = min(sampleCount, total / 4)
+        // Cap at 23 waypoints (Google Nav SDK limit is 25 incl. origin + destination)
+        let count = min(sampleCount, min(total - 2, 23))
         guard count > 0 else { return [] }
 
-        let step = total / (count + 1)
+        let step = max(1, (total - 2) / (count + 1))
         return (1...count).map { i in
             path.coordinate(at: UInt(i * step))
         }
@@ -144,7 +145,7 @@ class RouteService: ObservableObject {
         throw RouteError.noRouteFound("OSRM unavailable")
     }
 
-    // MARK: - Loop waypoint generation (mirrors web makeLoopWps)
+    // MARK: - Road-type aware waypoint generation
 
     private func makeLoopWaypoints(
         origin: CLLocationCoordinate2D,
@@ -154,35 +155,64 @@ class RouteService: ObservableObject {
         baseAngle: Double
     ) -> [CLLocationCoordinate2D] {
 
+        let types = preferences.selectedRoadTypes
+
+        // Duration → target distance → radius
         let targetKm = (Double(preferences.durationMinutes) / 60.0) * 25.0
-        let calcRad = targetKm / 2.5
-        let useRad = min(calcRad, Double(preferences.radiusKm)) * shrink
+        let calcRad  = targetKm / 2.5
+        let useRad   = min(calcRad, Double(preferences.radiusKm)) * shrink
 
-        let prefCount = preferences.selectedRoadTypes.count
-        let diff = max(1, min(5, prefCount))
-        let waypointCount = min(2 + diff, 7)
+        // Road-type modifiers
+        // Hills/roundabouts → tighter loops so OSRM is forced onto interesting roads
+        // Multi-lane/main roads → wider arcs to reach arterials
+        // Parking → very short radius, stay close to origin
+        let hasHills      = types.contains(.hills)
+        let hasRoundabout = types.contains(.roundabouts)
+        let hasParking    = types.contains(.parking)
+        let hasMultiLane  = types.contains(.multiLane)
+        let hasMainRoads  = types.contains(.mainRoads)
 
+        // Radius multiplier: parking/hills keep tight; multi-lane/main roads reach out
+        var radMult: Double = 0.85
+        if hasParking    { radMult = 0.40 }
+        else if hasHills { radMult = 0.60 }
+        else if hasMultiLane || hasMainRoads { radMult = 1.00 }
+
+        // Waypoint count: more waypoints → more turns (roundabouts, residential)
+        // fewer waypoints → straighter legs (multi-lane, main roads)
+        var waypointCount: Int
+        if hasRoundabout          { waypointCount = 6 }
+        else if hasParking        { waypointCount = 3 }
+        else if hasMultiLane      { waypointCount = 3 }
+        else if hasMainRoads      { waypointCount = 4 }
+        else                      { waypointCount = 5 }   // residential default
+
+        // Sweep angle: tight for parking/hills, wide arc for main/multi-lane
         let dir: Double = attempt % 2 == 0 ? 1.0 : -1.0
-        let sweepBase = 0.8 + Double(diff) * 0.25
-        let sweep = Double.pi * (sweepBase + Double.random(in: 0...0.4))
+        let sweepAngle: Double
+        if hasParking         { sweepAngle = Double.pi * 0.5 }
+        else if hasHills      { sweepAngle = Double.pi * 0.9 }
+        else if hasMultiLane  { sweepAngle = Double.pi * 1.6 }
+        else if hasMainRoads  { sweepAngle = Double.pi * 1.4 }
+        else                  { sweepAngle = Double.pi * 1.2 }   // residential
 
-        let prefIntensity = Double(prefCount) / 6.0
-        let radMultiplier = 0.7 + prefIntensity * 0.6
+        // Small per-attempt jitter so retries explore different roads
+        let jitter = Double(attempt) * 0.18
+        let effectiveSweep = sweepAngle + (attempt % 3 == 0 ? jitter : -jitter * 0.5)
 
         var waypoints: [CLLocationCoordinate2D] = []
 
         for j in 0..<waypointCount {
-            let frac = Double(j + 1) / Double(waypointCount + 1)
-            var angle = baseAngle + dir * sweep * frac
-            if diff >= 4 {
-                angle += Double.random(in: -0.3...0.3)
-            }
-            let dist = useRad * radMultiplier * Double.random(in: 0.5...1.0)
-            let latOffset = (dist * sin(angle)) / 110.574
-            let lngOffset = (dist * cos(angle)) / (111.320 * cos(origin.latitude * .pi / 180))
+            let frac  = Double(j + 1) / Double(waypointCount + 1)
+            let angle = baseAngle + dir * effectiveSweep * frac
+            // Small noise only on residential/roundabout routes; zero on main-road routes
+            let noise: Double = (hasMultiLane || hasMainRoads) ? 0.0 : Double.random(in: -0.12...0.12)
+            let dist  = useRad * radMult
+            let latOffset = (dist * sin(angle + noise)) / 110.574
+            let lngOffset = (dist * cos(angle + noise)) / (111.320 * cos(origin.latitude * .pi / 180))
 
             waypoints.append(CLLocationCoordinate2D(
-                latitude: origin.latitude + latOffset,
+                latitude:  origin.latitude  + latOffset,
                 longitude: origin.longitude + lngOffset
             ))
         }
