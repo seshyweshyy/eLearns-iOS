@@ -80,14 +80,13 @@ struct GlassPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         if #available(iOS 26, *) {
             configuration.label
-                .glassEffect(
-                    .regular.interactive(),
-                    in: Capsule()
-                )
+                .contentShape(Capsule())
+                .glassEffect(.regular.interactive(), in: Capsule())
                 .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
                 .animation(.spring(duration: 0.2), value: configuration.isPressed)
         } else {
             configuration.label
+                .contentShape(Capsule())
                 .background(.ultraThinMaterial, in: Capsule())
                 .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
                 .opacity(configuration.isPressed ? 0.85 : 1.0)
@@ -122,14 +121,13 @@ struct GlassCircleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         if #available(iOS 26, *) {
             configuration.label
-                .glassEffect(
-                    .regular.interactive(),
-                    in: Circle()
-                )
+                .contentShape(Circle())
+                .glassEffect(.regular.interactive(), in: Circle())
                 .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
                 .animation(.spring(duration: 0.2), value: configuration.isPressed)
         } else {
             configuration.label
+                .contentShape(Circle())
                 .background(.ultraThinMaterial, in: Circle())
                 .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
                 .opacity(configuration.isPressed ? 0.8 : 1.0)
@@ -150,14 +148,13 @@ struct GlassRoundedButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         if #available(iOS 26, *) {
             configuration.label
-                .glassEffect(
-                    .regular.interactive(),
-                    in: RoundedRectangle(cornerRadius: cornerRadius)
-                )
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: cornerRadius))
                 .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
                 .animation(.spring(duration: 0.2), value: configuration.isPressed)
         } else {
             configuration.label
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
                 .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
                 .opacity(configuration.isPressed ? 0.85 : 1.0)
