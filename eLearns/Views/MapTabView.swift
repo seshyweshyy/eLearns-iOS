@@ -56,7 +56,7 @@ struct MapTabView: View {
                         .buttonStyle(.glassCircle)
                         .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
                         .padding(.leading, 16)
-                        .padding(.bottom, 100)
+                        .padding(.bottom, 40)
                         Spacer()
                     }
                 }

@@ -52,10 +52,27 @@ class NavigationService: NSObject, ObservableObject {
                     navigator?.isGuidanceActive = true
                     mapView.cameraMode = .following
                     mapView.travelMode = .driving
-                    // Explicitly enable the navigation UI — shows arrow + hides blue dot
                     mapView.isNavigationEnabled = true
                     self.isNavigating = true
                     self.hasArrived = false
+
+                    // Seed initial values from the SDK immediately after route is set
+                    // so the overlay doesn't show 0 while waiting for first delegate tick
+                    if let time = navigator?.timeToNextDestination {
+                        self.remainingMinutes = time / 60.0
+                    }
+                    if let distance = navigator?.distanceToNextDestination {
+                        self.remainingDistanceKm = distance / 1000.0
+                    }
+                    // Fallback: re-read after SDK has a moment to compute
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        if let time = navigator?.timeToNextDestination, time > 0 {
+                            self.remainingMinutes = time / 60.0
+                        }
+                        if let distance = navigator?.distanceToNextDestination, distance > 0 {
+                            self.remainingDistanceKm = distance / 1000.0
+                        }
+                    }
                 } else {
                     print("Navigation routing error: \(routeStatus.rawValue)")
                 }

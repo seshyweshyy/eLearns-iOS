@@ -1,5 +1,6 @@
 import SwiftUI
 import GoogleMaps
+import GoogleNavigation
 
 @main
 struct eLearnsApp: App {
@@ -12,6 +13,18 @@ struct eLearnsApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onAppear {
+                    showNavTermsIfNeeded()
+                }
+        }
+    }
+
+    private func showNavTermsIfNeeded() {
+        let options = GMSNavigationTermsAndConditionsOptions(companyName: "eLearns")
+        GMSNavigationServices.showTermsAndConditionsDialogIfNeeded(with: options) { termsAccepted in
+            if termsAccepted {
+                GMSNavigationServices.setAbnormalTerminationReportingEnabled(true)
+            }
         }
     }
 }
