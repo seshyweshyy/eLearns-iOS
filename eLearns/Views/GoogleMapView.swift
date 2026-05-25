@@ -60,8 +60,8 @@ struct GoogleMapView: UIViewRepresentable {
                 mapView.cameraMode            = .following   // SDK handles all camera movement
                 mapView.travelMode            = .driving
                 mapView.settings.tiltGestures   = false
-                mapView.settings.scrollGestures = false
-                mapView.settings.rotateGestures = false
+                mapView.settings.scrollGestures = true
+                mapView.settings.rotateGestures = true
 
                 // Animate into 3D once — after that .following takes over
                 let navCamera = GMSCameraPosition(

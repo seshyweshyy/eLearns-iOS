@@ -92,10 +92,23 @@ struct MapTabView: View {
             VStack {
                 Spacer()
                 if appState.isNavigating {
-                    NavigationOverlayView(
-                        route: appState.currentRoute,
-                        onStop: stopNavigation
-                    )
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: stopNavigation) {
+                                Text("Exit")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 28)
+                                    .padding(.vertical, 14)
+                                    .background(Color.red, in: Capsule())
+                                    .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+                            }
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 10) // sits on the SDK's footer bar
+                        }
+                    }
                 } else if let route = appState.currentRoute {
                     routePreviewPanel(route)
                         .padding(.horizontal, 16)
